@@ -83,7 +83,7 @@ app.get("/kittens/:id", setUser, async (req, res, next) => {
       const { id } = req.params;
       const kitten = await Kitten.findByPk(id, { include: { model: User } });
       if (req.user.id !== kitten.ownerId) {
-        res.sendStatus(401);
+        res.sendStatus(403);
       } else {
         res.status(200).send({
           age: kitten.age,
@@ -135,7 +135,7 @@ app.delete("/kittens/:id", setUser, async (req, res, next) => {
       const { id } = req.params;
       const kitten = await Kitten.findByPk(id);
       if (req.user.id !== kitten.ownerId) {
-        res.sendStatus(401);
+        res.sendStatus(403);
       } else {
         await kitten.destroy();
         res.sendStatus(204);
