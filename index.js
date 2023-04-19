@@ -1,11 +1,14 @@
-const express = require('express');
+const express = require("express");
 const app = express();
-const { User } = require('./db');
+const { User, Kitten } = require("./db");
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+const { JWT_SECRET = "neverTell" } = process.env;
 
 app.use(express.json());
-app.use(express.urlencoded({extended:true}));
+app.use(express.urlencoded({ extended: true }));
 
-app.get('/', async (req, res, next) => {
+app.get("/", async (req, res, next) => {
   try {
     res.send(`
       <h1>Welcome to Cyber Kittens!</h1>
@@ -15,13 +18,27 @@ app.get('/', async (req, res, next) => {
     `);
   } catch (error) {
     console.error(error);
-    next(error)
+    next(error);
   }
 });
 
 // Verifies token with jwt.verify and sets req.user
 // TODO - Create authentication middleware
-
+const setUser = async (req, res, next) => {
+  const auth = req.header("Authorization");
+  if (!auth) {
+    next();
+  } else {
+    const [, token] = auth.split(" ");
+    try {
+      const user = jwt.verify(token, JWT_SECRET);
+      req.user = user;
+      next();
+    } catch (error) {
+      res.sendStatus(401);
+    }
+  }
+};
 // POST /register
 // OPTIONAL - takes req.body of {username, password} and creates a new user with the hashed password
 
@@ -30,18 +47,80 @@ app.get('/', async (req, res, next) => {
 
 // GET /kittens/:id
 // TODO - takes an id and returns the cat with that id
+app.get("/kittens/:id", setUser, async (req, res, next) => {
+  if (!req.user) {
+    res.sendStatus(401);
+  } else {
+    try {
+      const { id } = req.params;
+      const kitten = await Kitten.findByPk(id);
+      if (req.user.id !== kitten.ownerId) {
+        res.sendStatus(401);
+      } else {
+        res
+          .status(200)
+          .send({ age: kitten.age, color: kitten.color, name: kitten.name });
+      }
+    } catch (error) {
+      console.log(error);
+      next(error);
+    }
+  }
+});
 
 // POST /kittens
 // TODO - takes req.body of {name, age, color} and creates a new cat with the given name, age, and color
+app.post("/kittens", setUser, async (req, res, next) => {
+  const { name, age, color } = req.body;
+  if (!req.user) {
+    res.sendStatus(401);
+  } else {
+    try {
+      const newKitten = await Kitten.create({
+        name,
+        age,
+        color,
+        ownerId: req.user.id,
+      });
+      res.status(201).send({
+        age: newKitten.age,
+        color: newKitten.color,
+        name: newKitten.name,
+      });
+    } catch (error) {
+      console.log(error);
+      next(error);
+    }
+  }
+});
 
 // DELETE /kittens/:id
 // TODO - takes an id and deletes the cat with that id
+app.delete("/kittens/:id", setUser, async (req, res, next) => {
+  if (!req.user) {
+    res.sendStatus(401);
+  } else {
+    try {
+      const { id } = req.params;
+      const kitten = await Kitten.findByPk(id);
+      if (req.user.id !== kitten.ownerId) {
+        res.sendStatus(401);
+      } else {
+        await kitten.destroy();
+        res.sendStatus(204);
+      }
+    } catch (error) {
+      console.log(error);
+      next(error);
+    }
+  }
+});
 
 // error handling middleware, so failed tests receive them
 app.use((error, req, res, next) => {
-  console.error('SERVER ERROR: ', error);
-  if(res.statusCode < 400) res.status(500);
-  res.send({error: error.message, name: error.name, message: error.message});
+  console.error("SERVER ERROR: ", error);
+  if (res.statusCode < 400) res.status(500);
+  res.send({ error: error.message, name: error.name, message: error.message });
 });
 
 // we export the app, not listening in here, so that we can run tests
