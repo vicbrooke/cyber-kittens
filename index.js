@@ -81,13 +81,16 @@ app.get("/kittens/:id", setUser, async (req, res, next) => {
   } else {
     try {
       const { id } = req.params;
-      const kitten = await Kitten.findByPk(id);
+      const kitten = await Kitten.findByPk(id, { include: { model: User } });
       if (req.user.id !== kitten.ownerId) {
         res.sendStatus(401);
       } else {
-        res
-          .status(200)
-          .send({ age: kitten.age, color: kitten.color, name: kitten.name });
+        res.status(200).send({
+          age: kitten.age,
+          color: kitten.color,
+          name: kitten.name,
+          owner: kitten.user.username,
+        });
       }
     } catch (error) {
       console.log(error);
